@@ -198,7 +198,12 @@ class Import
 
                     $exists = (new $this->model)->where($this->uniqueField, $prepareInsert[$this->uniqueField] ?? null)->first();
                     if ($exists instanceof $this->model) {
-                        $skipped++;
+                        
+                        if ($this->shouldUpdateRecord()) {
+                            $this->updateRecord($exists, $prepareInsert);
+                        } else {
+                            $skipped++;
+                        }
 
                         continue;
                     }
@@ -239,5 +244,21 @@ class Import
                 ->persistent()
                 ->send();
         }
+    }
+
+    private function shouldUpdateRecord(): bool
+    {
+        return (config('filament-import.upsert.active', false));
+    }
+
+    private function updateRecord($record, array $data)
+    {
+        if (config('filament-import.upsert.only_form_fields', true)) {
+            $dataToUpdate = array_intersect_key($data, $this->formSchemas);
+        } else {
+            $dataToUpdate = $data;
+        }
+
+        return $record->update($dataToUpdate);
     }
 }
