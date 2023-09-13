@@ -42,6 +42,8 @@ class Import
 
     protected ?Closure $handleRecordCreation = null;
 
+    protected bool $disableRecordCreation = false;
+
     public static function make(string $spreadsheetFilePath): self
     {
         return (new self)
@@ -109,7 +111,7 @@ class Import
         $data = $this->toCollection($this->temporaryDiskIsRemote() ? $this->spreadsheet : new UploadedFile(Storage::disk($this->disk)->path($this->spreadsheet), $this->spreadsheet))
             ->first()
             ->skip((int) $this->shouldSkipHeader);
-        if (! $this->shouldHandleBlankRows) {
+        if (!$this->shouldHandleBlankRows) {
             return $data;
         }
 
@@ -147,6 +149,14 @@ class Import
         return $this;
     }
 
+    public function disableRecordCreation(bool $disableRecordCreation = true): static
+    {
+        $this->disableRecordCreation = $disableRecordCreation;
+
+        return $this;
+    }
+
+
     public function execute()
     {
         $importSuccess = true;
@@ -163,7 +173,7 @@ class Import
 
                     if ($field instanceof ImportField) {
                         // check if field is optional
-                        if (! $field->isRequired() && blank(@$row[$value])) {
+                        if (!$field->isRequired() && blank(@$row[$value])) {
                             continue;
                         }
 
@@ -179,7 +189,7 @@ class Import
 
                 $prepareInsert = $this->validated(data: Arr::undot($prepareInsert), rules: $rules, customMessages: $validationMessages, line: $line + 1);
 
-                if (! $prepareInsert) {
+                if (!$prepareInsert) {
                     DB::rollBack();
                     $importSuccess = false;
 
@@ -198,7 +208,7 @@ class Import
 
                     $exists = (new $this->model)->where($this->uniqueField, $prepareInsert[$this->uniqueField] ?? null)->first();
                     if ($exists instanceof $this->model) {
-                        
+
                         if ($this->shouldUpdateRecord()) {
                             $this->updateRecord($exists, $prepareInsert);
                         } else {
@@ -209,21 +219,23 @@ class Import
                     }
                 }
 
-                if (! $this->handleRecordCreation) {
-                    if (! $this->shouldMassCreate) {
-                        $model = (new $this->model)->fill($prepareInsert);
-                        $model = tap($model, function ($instance) {
-                            $instance->save();
-                        });
+                if (!$this->disableRecordCreation) {
+                    if (!$this->handleRecordCreation) {
+                        if (!$this->shouldMassCreate) {
+                            $model = (new $this->model)->fill($prepareInsert);
+                            $model = tap($model, function ($instance) {
+                                $instance->save();
+                            });
+                        } else {
+                            $model = $this->model::create($prepareInsert);
+                        }
                     } else {
-                        $model = $this->model::create($prepareInsert);
+                        $closure = $this->handleRecordCreation;
+                        $model = $closure($prepareInsert);
                     }
-                } else {
-                    $closure = $this->handleRecordCreation;
-                    $model = $closure($prepareInsert);
-                }
 
-                $this->doMutateAfterCreate($model, $prepareInsert);
+                    $this->doMutateAfterCreate($model, $prepareInsert);
+                }
             }
         });
 
@@ -236,7 +248,7 @@ class Import
                 ->send();
         }
 
-        if (! $importSuccess) {
+        if (!$importSuccess) {
             Notification::make()
                 ->danger()
                 ->title(trans('filament-import::actions.import_failed_title'))
