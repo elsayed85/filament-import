@@ -37,6 +37,8 @@ class ImportAction extends Action
 
     protected ?Closure $handleRecordCreation = null;
 
+    protected bool $disableRecordCreation = false;
+
     public static function getDefaultName(): ?string
     {
         return 'import';
@@ -72,6 +74,7 @@ class ImportAction extends Action
                     ->handleBlankRows($this->shouldHandleBlankRows)
                     ->mutateBeforeCreate($this->mutateBeforeCreate)
                     ->mutateAfterCreate($this->mutateAfterCreate)
+                    ->disableRecordCreation($this->disableRecordCreation)
                     ->handleRecordCreation($this->handleRecordCreation)
                     ->execute();
             });
@@ -130,7 +133,7 @@ class ImportAction extends Action
         return [
             FileUpload::make('file')
                 ->label('')
-                ->required(! app()->environment('testing'))
+                ->required(!app()->environment('testing'))
                 ->acceptedFileTypes(config('filament-import.accepted_mimes'))
                 ->imagePreviewHeight('250')
                 ->reactive()
@@ -171,7 +174,7 @@ class ImportAction extends Action
 
                 if ($selected !== false) {
                     $set($field->getName(), $selected);
-                } elseif (! empty($field->getAlternativeColumnNames())) {
+                } elseif (!empty($field->getAlternativeColumnNames())) {
                     $alternativeNames = array_intersect($field->getAlternativeColumnNames(), $options);
                     if (count($alternativeNames) > 0) {
                         $set($field->getName(), array_search(current($alternativeNames), $options));
@@ -186,6 +189,13 @@ class ImportAction extends Action
     {
         $this->handleRecordCreation = $closure;
         $this->massCreate(false);
+
+        return $this;
+    }
+
+    public function disableRecordCreation(): static
+    {
+        $this->disableRecordCreation = true;
 
         return $this;
     }
