@@ -234,7 +234,9 @@ class Import
                         $model = $closure($prepareInsert);
                     }
 
-                    $this->doMutateAfterCreate($model, $prepareInsert);
+                    if(!is_null($model)){
+                        $this->doMutateAfterCreate($model, $prepareInsert);
+                    }
                 }
             }
         });
